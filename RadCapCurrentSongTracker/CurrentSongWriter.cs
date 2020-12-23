@@ -12,8 +12,7 @@ namespace RadCapCurrentSongTracker
     public class CurrentSongWriter
     {
         private const int MinUpdateIntervalInSeconds = 1;
-        private const int MaxUpdateIntervalInSeconds = 1;
-
+        private const int MaxUpdateIntervalInSeconds = 60;
         private const string Txt = ".txt";
 
         private static readonly HttpClient _httpClient = new();
@@ -21,11 +20,13 @@ namespace RadCapCurrentSongTracker
         // Use for alternative way — parsing from playlist.
         private static readonly Regex _currentSongPatternHistory = new(
             @"<tr>(?:<td>(?'SongTime'[\d:]+?)<\/td>)<td>(?'SongName'[^\n\r\t\0]+?)(?:<td><b>Current Song<\/b><\/td>)<\/tr>",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
 
         private static readonly Regex _currentSongPatternMountData = new(
             @"<tr><td>Current Song:<\/td><td .+?>(?'SongName'.+?)<\/td><\/tr>",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
 
         private readonly TimeSpan _updateInterval;
 
@@ -45,8 +46,9 @@ namespace RadCapCurrentSongTracker
 
         internal async Task RunAll()
         {
+            AppDomain.CurrentDomain.ProcessExit += async (_, _) => await ResetFilesAsync();
             EnsureDirectory();
-            Console.WriteLine("Press any key to stop.");
+            Console.WriteLine($"Press any key to stop.{Environment.NewLine}");
             using var cts = new CancellationTokenSource();
             var token = cts.Token;
             var stopByUserTask = Task.Run(Console.ReadKey, token);
@@ -55,8 +57,7 @@ namespace RadCapCurrentSongTracker
             if (stoppingTask == stopByUserTask)
             {
                 cts.Cancel();
-                await ResetFilesAsync();
-                Console.WriteLine("\nStopped.");
+                Console.WriteLine($"{Environment.NewLine}Stopped.");
                 return;
             }
             await stoppingTask;
@@ -110,11 +111,13 @@ namespace RadCapCurrentSongTracker
                 catch (TaskCanceledException)
                 {
                     Console.WriteLine($"{ReportStation()} Task cancelled.");
+                    return;
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(ReportStation());
                     Console.WriteLine(e.ToString());
+                    await Task.Delay(_updateInterval, token); // just to prevent spam on network or file exceptions.
                 }
 
                 string ReportStation() => $"{now.LocalDateTime.TimeOfDay:hh':'mm':'ss} {station}";

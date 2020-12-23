@@ -21,7 +21,7 @@ namespace RadCapCurrentSongTracker
             Directory =
                 Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory,
-                    "ObsNowPlaying"), // @"Z:\ObsNowPlaying", // AppDomain.CurrentDomain.BaseDirectory
+                    "ObsNowPlaying"),
             UpdateIntervalInSeconds = 5,
         };
 
