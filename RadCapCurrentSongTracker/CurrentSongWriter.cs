@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -99,7 +100,7 @@ namespace RadCapCurrentSongTracker
                 {
                     var info = await _httpClient.GetStringAsync(requestUrl, token);
                     var match = _currentSongPatternMountData.Match(info);
-                    var songName = match.Groups["SongName"].Value;
+                    var songName = WebUtility.HtmlDecode(match.Groups["SongName"].Value);
                     if (songName != oldSongName)
                     {
                         await File.WriteAllTextAsync(path, songName, token);
