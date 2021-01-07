@@ -18,11 +18,13 @@ namespace RadCapCurrentSongTracker
 
         private static readonly HttpClient _httpClient = new();
 
+#pragma warning disable IDE0052 // Remove unread private members
         // Use for alternative way — parsing from playlist.
         private static readonly Regex _currentSongPatternHistory = new(
             @"<tr>(?:<td>(?'SongTime'[\d:]+?)<\/td>)<td>(?'SongName'[^\n\r\t\0]+?)(?:<td><b>Current Song<\/b><\/td>)<\/tr>",
             RegexOptions.Compiled,
             TimeSpan.FromSeconds(1));
+#pragma warning restore IDE0052 // Remove unread private members
 
         private static readonly Regex _currentSongPatternMountData = new(
             @"<tr><td>Current Song:<\/td><td .+?>(?'SongName'.+?)<\/td><\/tr>",
@@ -37,18 +39,15 @@ namespace RadCapCurrentSongTracker
 
         public CurrentSongWriter(Options options)
         {
-            options ??= Options.Default;
             _updateInterval = SafeUpdateInterval(options.UpdateIntervalInSeconds);
-            _directory = options.Directory;
-            _stations = options.Stations ?? Options.Default.Stations;
+            _directory = options.Directory!;
+            _stations = options.Stations ?? Options.Default.Stations!;
+            EnsureDirectory();
+            AppDomain.CurrentDomain.ProcessExit += async (_, _) => await ResetFilesAsync();
         }
 
-        internal static async Task<CurrentSongWriter> NewAsync() => new(await Options.InitAsync());
-
-        internal async Task RunAll()
+        internal async Task RunAllAsync()
         {
-            AppDomain.CurrentDomain.ProcessExit += async (_, _) => await ResetFilesAsync();
-            EnsureDirectory();
             Console.WriteLine($"Press any key to stop.{Environment.NewLine}");
             using var cts = new CancellationTokenSource();
             var token = cts.Token;

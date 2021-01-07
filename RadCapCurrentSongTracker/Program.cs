@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 namespace RadCapCurrentSongTracker
 {
@@ -6,7 +7,23 @@ namespace RadCapCurrentSongTracker
     {
         private static async Task Main()
         {
-            await (await CurrentSongWriter.NewAsync()).RunAll();
+            try
+            {
+                var options = await Options.InitAsync();
+                if (Options.AreInvalid(options, out var message))
+                {
+                    Console.WriteLine(message);
+                    Console.ReadKey();
+                    return;
+                }
+                await new CurrentSongWriter(options!).RunAllAsync();
+            }
+            catch (Exception a)
+            {
+                Console.WriteLine(a);
+                Console.WriteLine($"{Environment.NewLine}Unexpected error. Application will be closed.");
+                Console.ReadKey();
+            }
         }
     }
 }
