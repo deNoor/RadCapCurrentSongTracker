@@ -51,7 +51,7 @@ namespace RadCapCurrentSongTracker
             Console.WriteLine($"Press any key to stop.{Environment.NewLine}");
             using var cts = new CancellationTokenSource();
             var token = cts.Token;
-            var stopByUserTask = Task.Run(Console.ReadKey, token);
+            var stopByUserTask = Task.Run(() => Console.ReadKey(true), token);
             var tasks = _stations.Keys.Select(x => RunSongUpdaterAsync(x, token)).Append(stopByUserTask);
             var stoppingTask = await Task.WhenAny(tasks);
             if (stoppingTask == stopByUserTask)
