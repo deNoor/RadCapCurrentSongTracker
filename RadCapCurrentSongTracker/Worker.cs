@@ -60,6 +60,9 @@ namespace RadCapCurrentSongTracker
                 }
                 await stoppingTask;
             }
+            catch (TaskCanceledException)
+            {
+            }
             catch (Exception e)
             {
                 Console.WriteLine(e);
