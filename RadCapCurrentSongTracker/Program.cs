@@ -23,7 +23,6 @@ namespace RadCapCurrentSongTracker
                     (hostContext, services) =>
                     {
                         services.AddLogging(c => c.ClearProviders());
-                        services.AddHttpClient();
                         services.Configure<Options>(hostContext.Configuration);
                         services.AddCurrentSongWriter();
                         services.AddHostedService<Worker>();

@@ -130,7 +130,7 @@ namespace RadCapCurrentSongTracker
     {
         public static IServiceCollection AddCurrentSongWriter(this IServiceCollection services)
         {
-            services.AddTransient<CurrentSongWriter>();
+            services.AddHttpClient<CurrentSongWriter>(client => client.DefaultRequestVersion = HttpVersion.Version20);
             return services;
         }
     }
