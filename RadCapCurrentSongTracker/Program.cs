@@ -1,29 +1,32 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace RadCapCurrentSongTracker
 {
-    internal class Program
+    public class Program
     {
-        private static async Task Main()
-        {
-            try
-            {
-                var options = await Options.InitAsync();
-                if (Options.AreInvalid(options, out var message))
-                {
-                    Console.WriteLine(message);
-                    Console.ReadKey();
-                    return;
-                }
-                await new CurrentSongWriter(options!).RunAllAsync();
-            }
-            catch (Exception a)
-            {
-                Console.WriteLine(a);
-                Console.WriteLine($"{Environment.NewLine}Unexpected error. Application will be closed.");
-                Console.ReadKey();
-            }
-        }
+        public static async Task Main() => await CreateHostBuilder(Array.Empty<string>()).Build().RunAsync();
+
+        public static IHostBuilder CreateHostBuilder(string[] args)
+            => Host.CreateDefaultBuilder(args)
+               .ConfigureHostConfiguration(
+                    builder =>
+                    {
+                        builder.Sources.Clear();
+                        builder.AddJsonFile(Options.FullPath, true, false);
+                    })
+               .ConfigureServices(
+                    (hostContext, services) =>
+                    {
+                        services.AddLogging(c => c.ClearProviders());
+                        services.AddHttpClient();
+                        services.Configure<Options>(hostContext.Configuration);
+                        services.AddCurrentSongWriter();
+                        services.AddHostedService<Worker>();
+                    });
     }
 }

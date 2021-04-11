@@ -1,17 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadCapCurrentSongTracker
 {
     public partial class Options
     {
-        internal const string FileName = "setting.json";
+        internal const string FileName = "settings.json";
 
         public static Options Default { get; } = new()
         {
@@ -22,16 +22,17 @@ namespace RadCapCurrentSongTracker
             },
             Directory =
                 Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
+                    AppContext.BaseDirectory,
                     "ObsNowPlaying"),
             UpdateIntervalInSeconds = 5,
-            FirstStart = true,
         };
 
         [JsonIgnore]
-        public bool FirstStart { get; set; }
+        public bool FirstRun { get; set; }
 
-        private static readonly JsonSerializerOptions _jsonOptions = new()
+        internal static string FullPath { get; } = Path.Combine(AppContext.BaseDirectory, FileName);
+
+        private static JsonSerializerOptions JsonOptions { get; } = new()
         {
             AllowTrailingCommas = true,
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -41,66 +42,61 @@ namespace RadCapCurrentSongTracker
             WriteIndented = true,
         };
 
-        public static bool AreInvalid(Options? options, out string message)
+        public bool AreInvalid(out string message)
         {
-            if (options is null)
-            {
-                message = $"Unable to read program settings from {Path.GetFullPath(FileName)}";
-                return true;
-            }
-            if (string.IsNullOrWhiteSpace(options.Directory))
-            {
-                message = InvalidPropertyMessage(nameof(Directory));
-                return true;
-            }
-            if (options.Stations?.Any(kvp => string.IsNullOrWhiteSpace(kvp.Key) || string.IsNullOrWhiteSpace(kvp.Value)) != false)
-            {
-                message = InvalidPropertyMessage(nameof(Stations));
-                return true;
-            }
-            if (options.FirstStart)
-            {
-                message =
-                    $"First launch detected. Verify settings at {Path.GetFullPath(FileName)} and restart the program.";
-                return true;
-            }
             message = string.Empty;
+            if (FirstRun)
+            {
+                message = $"First launch detected. Verify settings at {FullPath} and restart the program.";
+                return true;
+            }
+            if (string.IsNullOrWhiteSpace(Directory))
+            {
+                message = CreateMessage($"{nameof(Directory)} is missing");
+                return true;
+            }
+            if (Stations is null)
+            {
+                message = CreateMessage($"{nameof(Stations)} is missing");
+                return true;
+            }
+            foreach (var (station, url) in Stations)
+            {
+                if (string.IsNullOrWhiteSpace(station))
+                {
+                    message = CreateMessage($"{nameof(Stations)} - {station} is not a name");
+                }
+
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var _))
+                {
+                    message = CreateMessage($"{nameof(Stations)} - {url} is not a valid url");
+                    return true;
+                }
+            }
+
             return false;
 
-            static string InvalidPropertyMessage(string propertyName)
-                => $"Invalid {propertyName}, check {Path.GetFullPath(FileName)}";
+            static string CreateMessage(string reason)
+                => $"{reason}, check {FullPath} or delete it to reset to default.";
         }
 
-        public static async Task<Options?> InitAsync()
+        public async Task InitAsync(CancellationToken cancellationToken)
         {
-            Options? options;
-            if (!File.Exists(FileName))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(FullPath))
             {
                 await using var fs = new FileStream(
-                    FileName,
+                    FullPath,
                     FileMode.Create,
                     FileAccess.Write,
                     FileShare.None,
                     4096,
                     FileOptions.Asynchronous);
-
-                await JsonSerializer.SerializeAsync(fs, Default, _jsonOptions);
-                options = Default;
+                await JsonSerializer.SerializeAsync(fs, Default, JsonOptions, cancellationToken);
+                FirstRun = true;
             }
-            else
-            {
-                await using var fs = new FileStream(
-                    FileName,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read,
-                    4096,
-                    FileOptions.Asynchronous);
-
-                options = await JsonSerializer.DeserializeAsync<Options?>(fs, _jsonOptions);
-            }
-
-            return options;
         }
+
+        public override string ToString() => JsonSerializer.Serialize(this, JsonOptions);
     }
 }

@@ -7,6 +7,8 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace RadCapCurrentSongTracker
 {
@@ -16,12 +18,11 @@ namespace RadCapCurrentSongTracker
         private const int MaxUpdateIntervalInSeconds = 60;
         private const string Txt = ".txt";
 
-        private static readonly HttpClient _httpClient = new();
-
 #pragma warning disable IDE0052 // Remove unread private members
         // Use for alternative way — parsing from playlist.
         private static readonly Regex _currentSongPatternHistory = new(
-            @"<tr>(?:<td>(?'SongTime'[\d:]+?)<\/td>)<td>(?'SongName'[^\n\r\t\0]+?)(?:<td><b>Current Song<\/b><\/td>)<\/tr>",
+            @"<tr>(?:<td>(?'SongTime'[\d:]+?)<\/td>)<td>(?'SongName'[^\n\r\t\0]+?)(?:<td><b>Current Song<\/b><\/td>)<\/tr>"
+           ,
             RegexOptions.Compiled,
             TimeSpan.FromSeconds(1));
 #pragma warning restore IDE0052 // Remove unread private members
@@ -31,39 +32,28 @@ namespace RadCapCurrentSongTracker
             RegexOptions.Compiled,
             TimeSpan.FromSeconds(1));
 
+        private readonly HttpClient _httpClient;
         private readonly TimeSpan _updateInterval;
-
         private readonly string _directory;
-
         private readonly Dictionary<string, string> _stations;
 
-        public CurrentSongWriter(Options options)
+        public CurrentSongWriter(IOptions<Options> options, HttpClient httpClient)
         {
-            _updateInterval = SafeUpdateInterval(options.UpdateIntervalInSeconds);
-            _directory = options.Directory!;
-            _stations = options.Stations ?? Options.Default.Stations!;
+            _updateInterval = ToSafeUpdateInterval(options.Value.UpdateIntervalInSeconds);
+            _directory = options.Value.Directory!;
+            _stations = options.Value.Stations!;
+            _httpClient = httpClient;
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
             EnsureDirectory();
-            AppDomain.CurrentDomain.ProcessExit += async (_, _) => await ResetFilesAsync();
+            await RunAllAsync(cancellationToken);
         }
 
-        internal async Task RunAllAsync()
-        {
-            Console.WriteLine($"Press any key to stop.{Environment.NewLine}");
-            using var cts = new CancellationTokenSource();
-            var token = cts.Token;
-            var stopByUserTask = Task.Run(() => Console.ReadKey(true), token);
-            var tasks = _stations.Keys.Select(x => RunSongUpdaterAsync(x, token)).Append(stopByUserTask);
-            var stoppingTask = await Task.WhenAny(tasks);
-            if (stoppingTask == stopByUserTask)
-            {
-                cts.Cancel();
-                Console.WriteLine($"{Environment.NewLine}Stopped.");
-                return;
-            }
-            await stoppingTask;
-        }
+        public Task StopAsync(CancellationToken cancellationToken) => ResetFilesAsync(cancellationToken);
 
-        private static TimeSpan SafeUpdateInterval(double? seconds)
+        private static TimeSpan ToSafeUpdateInterval(double? seconds)
         {
             seconds = Math.Max(
                 MinUpdateIntervalInSeconds,
@@ -71,10 +61,23 @@ namespace RadCapCurrentSongTracker
             return TimeSpan.FromSeconds(seconds.Value);
         }
 
-        private async Task ResetFilesAsync()
+        private async Task RunAllAsync(CancellationToken cancellationToken)
         {
-            var tasks = Directory.EnumerateFiles(_directory).Select(x => File.WriteAllTextAsync(x, string.Empty));
+            var tasks = _stations.Select(x => RunSongUpdaterAsync(x, cancellationToken));
+            await await Task.WhenAny(tasks);
+        }
+
+        private async Task ResetFilesAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Directory.Exists(_directory))
+            {
+                return;
+            }
+            var tasks = Directory.EnumerateFiles(_directory)
+               .Select(x => File.WriteAllTextAsync(x, string.Empty, cancellationToken));
             await Task.WhenAll(tasks);
+            Console.WriteLine("Song names are cleared.");
         }
 
         private void EnsureDirectory()
@@ -85,12 +88,11 @@ namespace RadCapCurrentSongTracker
             }
         }
 
-        private async Task RunSongUpdaterAsync(string station, CancellationToken token)
+        private async Task RunSongUpdaterAsync(KeyValuePair<string, string> data, CancellationToken token)
         {
-            var fileName = station + Txt;
+            var (station, urlTemplate) = data;
             var oldSongName = string.Empty;
-            var urlTemplate = _stations[station];
-            var path = Path.Combine(_directory, fileName);
+            var path = Path.ChangeExtension(Path.Combine(_directory, station), Txt);
             while (!token.IsCancellationRequested)
             {
                 var now = DateTimeOffset.UtcNow;
@@ -106,7 +108,6 @@ namespace RadCapCurrentSongTracker
                         oldSongName = songName;
                         Console.WriteLine($"{ReportStation()} -> {songName}");
                     }
-                    await Task.Delay(_updateInterval, token);
                 }
                 catch (TaskCanceledException)
                 {
@@ -117,11 +118,20 @@ namespace RadCapCurrentSongTracker
                 {
                     Console.WriteLine(ReportStation());
                     Console.WriteLine(e.ToString());
-                    await Task.Delay(_updateInterval, token); // just to prevent spam on network or file exceptions.
                 }
+                await Task.Delay(_updateInterval, token);
 
-                string ReportStation() => $"{now.LocalDateTime.TimeOfDay:hh':'mm':'ss} {station}";
+                string ReportStation() => $"{now.LocalDateTime:HH':'mm':'ss} {station}";
             }
+        }
+    }
+
+    public static class Extensions
+    {
+        public static IServiceCollection AddCurrentSongWriter(this IServiceCollection services)
+        {
+            services.AddTransient<CurrentSongWriter>();
+            return services;
         }
     }
 }
