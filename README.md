@@ -1,5 +1,6 @@
 # RadCapCurrentSongTracker
- 
-Tracks current song playing on RadCap radio and writes updates to a file. Made for personal use as a utility for OBS Studio.
+ Checks current song playing on RadCap radio and writes updates to a specified file.
 
-Updates are displayed in console window. Edit *settings.json* to add more stations to track.
+Made for personal use as a utility for OBS Studio.
+
+Edit `settings.json` to add more stations to track.
