@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using RadCapCurrentSongTracker.Logging;
 using RadCapCurrentSongTracker.Service;
 
 namespace RadCapCurrentSongTracker;
@@ -21,7 +22,7 @@ public class Program
                     builder.Sources.Clear();
                     builder.AddJsonFile(Settings.FullPath, true, false);
                 })
-           .ConfigureLogging(builder => builder.ClearProviders())
+           .ConfigureLogging(builder => builder.ClearProviders().AddPlainConsole().LogMyCodeOnly())
            .ConfigureServices((hostContext, services) => services.Configure<Settings>(hostContext.Configuration).AddHostedSongWriter())
            .UseDefaultServiceProvider(
                 options =>

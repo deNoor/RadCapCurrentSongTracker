@@ -3,18 +3,25 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace RadCapCurrentSongTracker.Service;
 
 public class Worker : BackgroundService
 {
+    private readonly ILogger<Worker> _logger;
     private readonly IOptions<Settings> _options;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly CurrentSongUpdater _songNameWriter;
 
-    public Worker(IOptions<Settings> options, IHostApplicationLifetime appLifetime, CurrentSongUpdater songNameWriter)
+    public Worker(
+        ILogger<Worker> logger,
+        IOptions<Settings> options,
+        IHostApplicationLifetime appLifetime,
+        CurrentSongUpdater songNameWriter)
     {
+        _logger = logger;
         _options = options;
         _appLifetime = appLifetime;
         _songNameWriter = songNameWriter;
@@ -26,7 +33,7 @@ public class Worker : BackgroundService
         await _options.Value.InitAsync(stoppingToken);
         if (_options.Value.AreInvalid(out var reason))
         {
-            Console.WriteLine(reason);
+            _logger.LogCritical(reason);
             Console.ReadKey(true);
             _appLifetime.StopApplication();
             return;
@@ -53,8 +60,7 @@ public class Worker : BackgroundService
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e);
-                    Console.WriteLine($"{Environment.NewLine}Unexpected error. Application will be closed.");
+                    _logger.LogCritical(e, "Unexpected error. Application will be closed.");
                     Console.ReadKey(true);
                 }
                 finally
@@ -66,7 +72,7 @@ public class Worker : BackgroundService
 
     private async Task WorkerMain(CancellationToken stoppingToken)
     {
-        Console.WriteLine($"Press any key to stop.{Environment.NewLine}");
+        _logger.LogInformation($"Press any key to stop.{Environment.NewLine}");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var token = cts.Token;
         var stopByUserTask = Task.Run(() => Console.ReadKey(true), token);
@@ -75,7 +81,7 @@ public class Worker : BackgroundService
         if (stoppingTask == stopByUserTask)
         {
             cts.Cancel();
-            Console.WriteLine($"{Environment.NewLine}Stopped by you.");
+            _logger.LogInformation("Stopped by you.");
         }
         await stoppingTask;
     }

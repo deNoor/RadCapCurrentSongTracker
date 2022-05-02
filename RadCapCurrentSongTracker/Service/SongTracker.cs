@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace RadCapCurrentSongTracker.Service;
@@ -24,11 +25,13 @@ public class SongTracker
         RegexOptions.Compiled,
         TimeSpan.FromSeconds(1));
 
+    private readonly ILogger<SongTracker> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly Settings _settings;
 
-    public SongTracker(IHttpClientFactory httpClientFactory, IOptions<Settings> options)
+    public SongTracker(ILogger<SongTracker> logger, IHttpClientFactory httpClientFactory, IOptions<Settings> options)
     {
+        _logger = logger;
         _httpClientFactory = httpClientFactory;
         _settings = options.Value;
     }
@@ -48,7 +51,7 @@ public class SongTracker
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            _logger.LogError(e, "failed to track song");
         }
 
         return songName;

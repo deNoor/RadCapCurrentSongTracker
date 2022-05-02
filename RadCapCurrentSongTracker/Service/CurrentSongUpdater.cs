@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace RadCapCurrentSongTracker.Service;
@@ -15,13 +16,15 @@ public class CurrentSongUpdater
     private const int MaxUpdateIntervalInSeconds = 60;
     private const string Txt = ".txt";
 
+    private readonly ILogger<CurrentSongUpdater> _logger;
     private readonly SongTracker _songTracker;
     private readonly TimeSpan _updateInterval;
     private readonly string _directory;
     private readonly Dictionary<string, string> _stations;
 
-    public CurrentSongUpdater(SongTracker songTracker, IOptions<Settings> options)
+    public CurrentSongUpdater(ILogger<CurrentSongUpdater> logger, SongTracker songTracker, IOptions<Settings> options)
     {
+        _logger = logger;
         _songTracker = songTracker;
         _updateInterval = ToSafeUpdateInterval(options.Value.UpdateIntervalInSeconds);
         _directory = options.Value.Directory!;
@@ -57,7 +60,7 @@ public class CurrentSongUpdater
         }
         var tasks = Directory.EnumerateFiles(_directory).Select(x => File.WriteAllTextAsync(x, string.Empty, cancellationToken));
         await Task.WhenAll(tasks);
-        Console.WriteLine("Song names are cleared.");
+        _logger.LogInformation("Song names are cleared.");
     }
 
     private void EnsureDirectory()
@@ -81,27 +84,25 @@ public class CurrentSongUpdater
                 {
                     await File.WriteAllTextAsync(path, songName, token);
                     oldSongName = songName;
-                    Console.WriteLine($"{ReportStation()} -> {songName}");
+                    _logger.LogInformation($"{station} -> {songName}");
                 }
             }
             catch (TaskCanceledException)
             {
-                Console.WriteLine($"{ReportStation()} Task cancelled.");
+                _logger.LogInformation($"{station} Task cancelled.");
                 return;
             }
             catch (Exception e)
             {
-                Console.WriteLine(ReportStation());
-                Console.WriteLine(e.ToString());
+                _logger.LogError(e, station);
             }
             await Task.Delay(_updateInterval, token);
-
-            string ReportStation() => $"{DateTime.Now:HH:mm:ss} {station}";
         }
     }
 }
 
 internal static partial class Extensions
 {
-    public static IServiceCollection AddCurrentSongWriter(this IServiceCollection services) => services.AddTransient<CurrentSongUpdater>().AddSongTracker();
+    public static IServiceCollection AddCurrentSongWriter(this IServiceCollection services) =>
+        services.AddTransient<CurrentSongUpdater>().AddSongTracker();
 }
