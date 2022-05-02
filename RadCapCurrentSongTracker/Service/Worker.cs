@@ -1,18 +1,19 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
-namespace RadCapCurrentSongTracker;
+namespace RadCapCurrentSongTracker.Service;
 
 public class Worker : BackgroundService
 {
     private readonly IOptions<Settings> _options;
     private readonly IHostApplicationLifetime _appLifetime;
-    private readonly CurrentSongWriter _songNameWriter;
+    private readonly CurrentSongUpdater _songNameWriter;
 
-    public Worker(IOptions<Settings> options, IHostApplicationLifetime appLifetime, CurrentSongWriter songNameWriter)
+    public Worker(IOptions<Settings> options, IHostApplicationLifetime appLifetime, CurrentSongUpdater songNameWriter)
     {
         _options = options;
         _appLifetime = appLifetime;
@@ -30,7 +31,6 @@ public class Worker : BackgroundService
             _appLifetime.StopApplication();
             return;
         }
-
         await base.StartAsync(stoppingToken);
     }
 
@@ -70,7 +70,7 @@ public class Worker : BackgroundService
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var token = cts.Token;
         var stopByUserTask = Task.Run(() => Console.ReadKey(true), token);
-        var songNameWriterTask = _songNameWriter.RunAsync(token);
+        var songNameWriterTask = _songNameWriter.RunAsync(CancellationToken.None);
         var stoppingTask = await Task.WhenAny(songNameWriterTask, stopByUserTask);
         if (stoppingTask == stopByUserTask)
         {
@@ -79,4 +79,10 @@ public class Worker : BackgroundService
         }
         await stoppingTask;
     }
+}
+
+internal static partial class Extensions
+{
+    public static IServiceCollection AddHostedSongWriter(this IServiceCollection services) =>
+        services.AddHostedService<Worker>().AddCurrentSongWriter();
 }

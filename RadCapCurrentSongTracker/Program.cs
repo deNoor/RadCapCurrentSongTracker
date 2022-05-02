@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using RadCapCurrentSongTracker.Service;
 
 namespace RadCapCurrentSongTracker;
 
@@ -13,18 +14,21 @@ public class Program
 
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
+           .UseConsoleLifetime()
            .ConfigureHostConfiguration(
                 builder =>
                 {
                     builder.Sources.Clear();
                     builder.AddJsonFile(Settings.FullPath, true, false);
                 })
-           .ConfigureServices(
-                (hostContext, services) =>
+           .ConfigureLogging(builder => builder.ClearProviders())
+           .ConfigureServices((hostContext, services) => services.Configure<Settings>(hostContext.Configuration).AddHostedSongWriter())
+           .UseDefaultServiceProvider(
+                options =>
                 {
-                    services.AddLogging(c => c.ClearProviders());
-                    services.Configure<Settings>(hostContext.Configuration);
-                    services.AddCurrentSongWriter();
-                    services.AddHostedService<Worker>();
+#if DEBUG
+                    options.ValidateOnBuild = true;
+                    options.ValidateScopes = true;
+#endif
                 });
 }

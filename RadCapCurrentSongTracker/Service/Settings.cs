@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RadCapCurrentSongTracker;
+namespace RadCapCurrentSongTracker.Service;
 
 public partial class Settings
 {
